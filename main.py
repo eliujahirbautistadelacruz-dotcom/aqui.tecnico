@@ -9,6 +9,7 @@ from perfil.tecnico import tecnico_bp
 from perfil.usuario import usuario_bp
 
 app = Flask(__name__)
+app.config["PREFERRED_URL_SCHEME"] = "https"
 app.secret_key = "tu_clave_secreta_super_segura"
 app.register_blueprint(inicio_bp)
 app.register_blueprint(escoge_bp)
@@ -164,7 +165,7 @@ def registro():
 
 @app.route("/login/google")
 def login_google():
-    redirect_uri = url_for("authorized", _external=True)
+    redirect_uri = url_for("authorized", _external=True, _scheme="https")
     return google.authorize_redirect(redirect_uri)
 
 @app.route("/authorized")
