@@ -42,8 +42,8 @@ init_db()
 oauth = OAuth(app)
 google = oauth.register(
     name="google",
-    client_id="TU_CLIENT_ID.apps.googleusercontent.com",
-    client_secret="TU_CLIENT_SECRET",
+    client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={"scope": "openid email profile"},
 )
