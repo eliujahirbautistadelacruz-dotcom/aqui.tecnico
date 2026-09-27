@@ -2,11 +2,18 @@ import os
 import sqlite3
 from flask import Flask, request, redirect, render_template_string, session, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
+from authlib.integrations.flask_client import OAuth
 from inicio.inicio import inicio_bp
+from perfil.escoge import escoge_bp
+from perfil.tecnico import tecnico_bp
+from perfil.usuario import usuario_bp
 
 app = Flask(__name__)
 app.secret_key = "tu_clave_secreta_super_segura"
 app.register_blueprint(inicio_bp)
+app.register_blueprint(escoge_bp)
+app.register_blueprint(tecnico_bp)
+app.register_blueprint(usuario_bp)
 
 DB = "usuarios.db"
 
@@ -16,13 +23,30 @@ def init_db():
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             usuario TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
+            password TEXT,
+            email TEXT,
+            metodo TEXT DEFAULT 'local',
+            rol TEXT,
+            oficio TEXT,
+            latitud REAL,
+            longitud REAL,
+            fecha_registro TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()
     conn.close()
 
 init_db()
+
+# --- Configuración Google OAuth ---
+oauth = OAuth(app)
+google = oauth.register(
+    name="google",
+    client_id="TU_CLIENT_ID.apps.googleusercontent.com",
+    client_secret="TU_CLIENT_SECRET",
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 LOGIN_STYLE = """
 <style>
@@ -33,28 +57,48 @@ body {
     display: flex; justify-content: center; align-items: center;
     height: 100vh; margin: 0;
 }
-.card {
-    background: white; padding: 40px; border-radius: 16px;
-    width: 360px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-}
+.card { background: white; padding: 40px; border-radius: 16px; width: 360px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
 .card h2 { color: #1a1a1a; margin: 0 0 24px; font-size: 22px; }
 label { display: block; color: #4a4a4a; font-size: 13px; margin-bottom: 6px; font-weight: 600; }
-input {
-    width: 100%; padding: 11px 12px; margin-bottom: 16px;
-    border: 1px solid #d9d9d9; border-radius: 8px; font-size: 14px;
-}
-input:focus { outline: none; border-color: #6b73ff; }
-.btn-primary {
-    width: 100%; padding: 11px; background: #6b73ff; color: white;
-    border: none; border-radius: 8px; font-weight: 600; font-size: 14px;
-    cursor: pointer; margin-bottom: 16px;
-}
-.btn-primary:hover { background: #5a61e0; }
+input { width: 100%; padding: 11px 12px; margin-bottom: 16px;
+        border: 1px solid #d9d9d9; border-radius: 8px; font-size: 14px; }
+.btn-primary { width: 100%; padding: 11px; background: #6b73ff; color: white;
+               border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-bottom: 16px; }
+.divider { display: flex; align-items: center; color: #999; font-size: 12px; margin: 16px 0; }
+.divider::before, .divider::after { content: ""; flex: 1; border-bottom: 1px solid #e0e0e0; }
+.divider span { padding: 0 10px; }
+.btn-google { width: 100%; padding: 10px; background: white; color: #333;
+              border: 1px solid #d9d9d9; border-radius: 8px; cursor: pointer;
+              display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
 .footer-link { text-align: center; margin-top: 20px; font-size: 13px; color: #666; }
 .footer-link a { color: #6b73ff; text-decoration: none; font-weight: 600; }
 .msg { color: #e74c3c; font-size: 13px; text-align: center; margin-bottom: 12px; }
 </style>
 """
+
+GOOGLE_BTN = """
+<div class="divider"><span>O</span></div>
+<a href="/login/google" class="btn-google">
+    <svg width="18" height="18" viewBox="0 0 18 18">
+        <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.8 2.73v2.27h2.91c1.7-1.57 2.69-3.88 2.69-6.64z"/>
+        <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.27c-.81.54-1.84.86-3.05.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33C2.44 15.98 5.48 18 9 18z"/>
+        <path fill="#FBBC05" d="M3.96 10.7c-.18-.54-.28-1.11-.28-1.7s.1-1.16.28-1.7V4.97H.96C.35 6.17 0 7.55 0 9s.35 2.83.96 4.03l3-2.33z"/>
+        <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.96 4.97l3 2.33C4.67 5.16 6.66 3.58 9 3.58z"/>
+    </svg>
+    Iniciar sesión con Google
+</a>
+"""
+
+def redirigir_tras_login(usuario):
+    conn = sqlite3.connect(DB)
+    row = conn.execute("SELECT rol FROM usuarios WHERE usuario = ?", (usuario,)).fetchone()
+    conn.close()
+    session["usuario"] = usuario
+    if row and row[0]:
+        session["rol"] = row[0]
+        return redirect(url_for("tecnico.panel" if row[0] == "tecnico" else "usuario.panel"))
+    return redirect(url_for("escoge.escoge"))
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -65,9 +109,8 @@ def login():
         conn = sqlite3.connect(DB)
         row = conn.execute("SELECT password FROM usuarios WHERE usuario = ?", (usuario,)).fetchone()
         conn.close()
-        if row and check_password_hash(row[0], password):
-            session["usuario"] = usuario
-            return redirect(url_for("inicio.home"))
+        if row and row[0] and check_password_hash(row[0], password):
+            return redirigir_tras_login(usuario)
         error = "Usuario o contraseña incorrectos"
     return render_template_string(LOGIN_STYLE + """
         <div class="card">
@@ -80,6 +123,7 @@ def login():
                 <input type="password" name="password" placeholder="••••••••" required>
                 <button type="submit" class="btn-primary">Iniciar sesión</button>
             </form>
+            """ + GOOGLE_BTN + """
             <p class="footer-link">¿Nuevo aquí? <a href="/registro">Crear cuenta</a></p>
         </div>
     """, error=error)
@@ -93,7 +137,7 @@ def registro():
         conn = sqlite3.connect(DB)
         try:
             conn.execute(
-                "INSERT INTO usuarios (usuario, password) VALUES (?, ?)",
+                "INSERT INTO usuarios (usuario, password, metodo) VALUES (?, ?, 'local')",
                 (usuario, generate_password_hash(password))
             )
             conn.commit()
@@ -113,13 +157,38 @@ def registro():
                 <input type="password" name="password" placeholder="••••••••" required>
                 <button type="submit" class="btn-primary">Registrarse</button>
             </form>
+            """ + GOOGLE_BTN + """
             <p class="footer-link">¿Ya tienes cuenta? <a href="/login">Inicia sesión</a></p>
         </div>
     """, error=error)
 
+@app.route("/login/google")
+def login_google():
+    redirect_uri = url_for("authorized", _external=True)
+    return google.authorize_redirect(redirect_uri)
+
+@app.route("/authorized")
+def authorized():
+    token = google.authorize_access_token()
+    user_info = token.get("userinfo")
+    email = user_info["email"]
+    nombre = user_info.get("name", email)
+
+    conn = sqlite3.connect(DB)
+    row = conn.execute("SELECT usuario FROM usuarios WHERE email = ?", (email,)).fetchone()
+    if not row:
+        conn.execute(
+            "INSERT INTO usuarios (usuario, email, metodo) VALUES (?, ?, 'google')",
+            (nombre, email)
+        )
+        conn.commit()
+    conn.close()
+
+    return redirigir_tras_login(nombre)
+
 @app.route("/logout")
 def logout():
-    session.pop("usuario", None)
+    session.clear()
     return redirect(url_for("login"))
 
 if __name__ == "__main__":
