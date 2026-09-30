@@ -7,14 +7,16 @@ from inicio.inicio import inicio_bp
 from perfil.escoge import escoge_bp
 from perfil.tecnico import tecnico_bp
 from perfil.usuario import usuario_bp
+from perfil.calificar import calificar_bp
 
 app = Flask(__name__)
-app.config["PREFERRED_URL_SCHEME"] = "https"
 app.secret_key = "tu_clave_secreta_super_segura"
+app.config["PREFERRED_URL_SCHEME"] = "https"
 app.register_blueprint(inicio_bp)
 app.register_blueprint(escoge_bp)
 app.register_blueprint(tecnico_bp)
 app.register_blueprint(usuario_bp)
+app.register_blueprint(calificar_bp)
 
 DB = "usuarios.db"
 
@@ -29,9 +31,22 @@ def init_db():
             metodo TEXT DEFAULT 'local',
             rol TEXT,
             oficio TEXT,
+            telefono TEXT,
+            precio_desde REAL,
+            descripcion TEXT,
             latitud REAL,
             longitud REAL,
             fecha_registro TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS calificaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tecnico TEXT NOT NULL,
+            autor TEXT NOT NULL,
+            estrellas INTEGER NOT NULL,
+            comentario TEXT,
+            fecha TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
     conn.commit()
@@ -39,12 +54,11 @@ def init_db():
 
 init_db()
 
-# --- Configuración Google OAuth ---
 oauth = OAuth(app)
 google = oauth.register(
     name="google",
     client_id=os.environ.get("GOOGLE_CLIENT_ID"),
-client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+    client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
     server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={"scope": "openid email profile"},
 )
