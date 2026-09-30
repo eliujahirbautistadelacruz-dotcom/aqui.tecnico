@@ -1,31 +1,33 @@
 import sqlite3
+import os
 from flask import Blueprint, session, redirect, url_for, render_template_string, request
 
 calificar_bp = Blueprint("calificar", __name__)
-DB = "usuarios.db"
+DB = os.environ.get("DB_PATH", "usuarios.db")
 
 ESTILO = """
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 * { box-sizing: border-box; }
 body {
     font-family: -apple-system, 'Segoe UI', sans-serif;
     background: linear-gradient(135deg, #6b73ff 0%, #ff6b9d 100%);
     display: flex; justify-content: center; align-items: center;
-    height: 100vh; margin: 0;
+    min-height: 100vh; margin: 0; padding: 16px;
 }
-.card { background: white; padding: 36px; border-radius: 16px; width: 360px;
+.card { background: white; padding: 36px; border-radius: 16px; width: 100%; max-width: 360px;
         box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
 .card h2 { color: #1a1a1a; margin: 0 0 4px; font-size: 20px; }
 .card p.sub { color: #666; font-size: 13px; margin-bottom: 20px; }
-.estrellas { display: flex; gap: 6px; font-size: 32px; margin-bottom: 18px; justify-content: center; }
+.estrellas { display: flex; gap: 6px; font-size: 34px; margin-bottom: 18px; justify-content: center; }
 .estrellas label { cursor: pointer; color: #ddd; }
 .estrellas input { display: none; }
 .estrellas input:checked ~ label,
 .estrellas label:hover, .estrellas label:hover ~ label { color: #f5a623; }
-textarea { width: 100%; padding: 11px; border-radius: 8px; border: 1px solid #d9d9d9;
-           font-size: 14px; font-family: inherit; margin-bottom: 16px; }
-button { width: 100%; padding: 11px; background: #6b73ff; color: white; border: none;
-         border-radius: 8px; font-weight: 600; cursor: pointer; }
+textarea { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #d9d9d9;
+           font-size: 15px; font-family: inherit; margin-bottom: 16px; }
+button { width: 100%; padding: 13px; background: #6b73ff; color: white; border: none;
+         border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 15px; }
 .volver { text-align: center; margin-top: 14px; font-size: 13px; }
 .volver a { color: #6b73ff; text-decoration: none; }
 </style>

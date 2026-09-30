@@ -1,8 +1,9 @@
 import sqlite3
+import os
 from flask import Blueprint, session, redirect, url_for, render_template_string, request, jsonify
 
 tecnico_bp = Blueprint("tecnico", __name__, url_prefix="/tecnico")
-DB = "usuarios.db"
+DB = os.environ.get("DB_PATH", "usuarios.db")
 
 OFICIOS = [
     "plomero", "electricista", "aire_acondicionado", "gas",
@@ -10,18 +11,16 @@ OFICIOS = [
 ]
 
 ESTILO = """
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 * { box-sizing: border-box; }
-body {
-    font-family: -apple-system, 'Segoe UI', sans-serif;
-    background: #f4f5ff; margin: 0; padding: 24px;
-}
-.card { background: white; padding: 32px; border-radius: 16px; width: 440px;
-        margin: 40px auto; box-shadow: 0 10px 40px rgba(0,0,0,0.08); }
-.card h1 { color: #1a1a1a; font-size: 20px; margin: 0 0 6px; }
+body { font-family: -apple-system, 'Segoe UI', sans-serif; background: #f4f5ff; margin: 0; padding: 16px; }
+.card { background: white; padding: 28px; border-radius: 16px; width: 100%; max-width: 460px;
+        margin: 24px auto; box-shadow: 0 10px 40px rgba(0,0,0,0.08); }
+.card h1 { color: #1a1a1a; font-size: 19px; margin: 0 0 6px; }
 .rating { color: #f5a623; font-size: 15px; margin-bottom: 20px; }
 label { font-size: 13px; color: #4a4a4a; font-weight: 600; display: block; margin-bottom: 6px; }
-select, input, textarea, button { width: 100%; padding: 11px; border-radius: 8px; font-size: 14px;
+select, input, textarea, button { width: 100%; padding: 12px; border-radius: 8px; font-size: 15px;
         margin-bottom: 14px; font-family: inherit; }
 select, input, textarea { border: 1px solid #d9d9d9; }
 .btn-guardar { background: #333; color: white; border: none; cursor: pointer; font-weight: 600; }
@@ -31,6 +30,11 @@ select, input, textarea { border: 1px solid #d9d9d9; }
 .ok { color: #2ecc71; font-weight: 600; }
 .salir { text-align: center; font-size: 13px; }
 .salir a { color: #6b73ff; text-decoration: none; }
+.resenas { margin-top: 24px; border-top: 1px solid #eee; padding-top: 16px; }
+.resenas h3 { font-size: 15px; margin-bottom: 10px; }
+.resena-item { background: #f9f9ff; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
+.resena-item .top { display: flex; justify-content: space-between; color: #f5a623; font-weight: 600; }
+.resena-item .autor { color: #666; font-weight: 400; }
 </style>
 """
 
@@ -48,6 +52,10 @@ def panel():
         "SELECT COUNT(*), AVG(estrellas) FROM calificaciones WHERE tecnico = ?",
         (session["usuario"],)
     ).fetchone()
+    resenas = conn.execute(
+        "SELECT autor, estrellas, comentario, fecha FROM calificaciones WHERE tecnico = ? ORDER BY fecha DESC LIMIT 10",
+        (session["usuario"],)
+    ).fetchall()
     conn.close()
 
     oficio_actual, telefono, precio, descripcion, lat, lng = row if row else (None, None, None, None, None, None)
@@ -59,6 +67,18 @@ def panel():
         f'<option value="{o}" {"selected" if o == oficio_actual else ""}>{o.replace("_", " ").title()}</option>'
         for o in OFICIOS
     )
+
+    resenas_html = ""
+    if resenas:
+        for autor, estrellas, comentario, fecha in resenas:
+            estrellitas = "⭐" * estrellas
+            resenas_html += f"""
+            <div class="resena-item">
+                <div class="top"><span>{estrellitas}</span><span class="autor">{autor}</span></div>
+                {f'<div>{comentario}</div>' if comentario else ''}
+            </div>"""
+    else:
+        resenas_html = "<p style='color:#999; font-size:13px;'>Todavía no tienes reseñas.</p>"
 
     return render_template_string(ESTILO + """
         <div class="card">
@@ -91,6 +111,11 @@ def panel():
                 {% endif %}
             </div>
             <button class="btn-ubicacion" onclick="compartirUbicacion()">📍 Compartir mi ubicación</button>
+
+            <div class="resenas">
+                <h3>Tus últimas reseñas</h3>
+                """ + resenas_html + """
+            </div>
 
             <p class="salir"><a href="/logout">Cerrar sesión</a></p>
         </div>

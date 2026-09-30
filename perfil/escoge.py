@@ -1,30 +1,35 @@
 import sqlite3
+import os
 from flask import Blueprint, session, redirect, url_for, render_template_string, request
 
 escoge_bp = Blueprint("escoge", __name__)
-DB = "usuarios.db"
+DB = os.environ.get("DB_PATH", "usuarios.db")
 
 ESCOGE_STYLE = """
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 * { box-sizing: border-box; }
 body {
     font-family: -apple-system, 'Segoe UI', sans-serif;
     background: linear-gradient(135deg, #6b73ff 0%, #ff6b9d 100%);
     display: flex; justify-content: center; align-items: center;
-    height: 100vh; margin: 0;
+    min-height: 100vh; margin: 0; padding: 16px;
 }
-.card { background: white; padding: 48px; border-radius: 16px; width: 400px;
+.card { background: white; padding: 48px; border-radius: 16px; width: 100%; max-width: 400px;
         text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
 .card h1 { color: #1a1a1a; margin: 0 0 8px; font-size: 22px; }
 .card p { color: #666; font-size: 14px; margin-bottom: 28px; }
-.opciones { display: flex; gap: 16px; }
+.opciones { display: flex; gap: 16px; flex-wrap: wrap; }
 .opcion {
-    flex: 1; padding: 24px 16px; border: 2px solid #e0e0e0; border-radius: 12px;
+    flex: 1; min-width: 140px; padding: 24px 16px; border: 2px solid #e0e0e0; border-radius: 12px;
     cursor: pointer; background: none; font-family: inherit; font-size: 14px; font-weight: 600;
     color: #1a1a1a; width: 100%;
 }
 .opcion:hover { border-color: #6b73ff; background: #f5f6ff; }
 .opcion .icono { font-size: 32px; display: block; margin-bottom: 8px; }
+@media (max-width: 480px) {
+    .opciones { flex-direction: column; }
+}
 </style>
 """
 

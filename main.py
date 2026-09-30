@@ -18,7 +18,9 @@ app.register_blueprint(tecnico_bp)
 app.register_blueprint(usuario_bp)
 app.register_blueprint(calificar_bp)
 
-DB = "usuarios.db"
+# Si existe la variable DB_PATH (volumen persistente en Railway), la usa.
+# Si no, usa un archivo local (para pruebas en tu laptop).
+DB = os.environ.get("DB_PATH", "usuarios.db")
 
 def init_db():
     conn = sqlite3.connect(DB)
@@ -63,32 +65,37 @@ google = oauth.register(
     client_kwargs={"scope": "openid email profile"},
 )
 
-LOGIN_STYLE = """
+BASE_HEAD = """
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 * { box-sizing: border-box; }
 body {
     font-family: -apple-system, 'Segoe UI', sans-serif;
     background: linear-gradient(135deg, #6b73ff 0%, #ff6b9d 100%);
     display: flex; justify-content: center; align-items: center;
-    height: 100vh; margin: 0;
+    min-height: 100vh; margin: 0; padding: 16px;
 }
-.card { background: white; padding: 40px; border-radius: 16px; width: 360px;
+.card { background: white; padding: 40px; border-radius: 16px; width: 100%; max-width: 360px;
         box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
 .card h2 { color: #1a1a1a; margin: 0 0 24px; font-size: 22px; }
 label { display: block; color: #4a4a4a; font-size: 13px; margin-bottom: 6px; font-weight: 600; }
-input { width: 100%; padding: 11px 12px; margin-bottom: 16px;
-        border: 1px solid #d9d9d9; border-radius: 8px; font-size: 14px; }
-.btn-primary { width: 100%; padding: 11px; background: #6b73ff; color: white;
-               border: none; border-radius: 8px; font-weight: 600; cursor: pointer; margin-bottom: 16px; }
+input { width: 100%; padding: 12px; margin-bottom: 16px;
+        border: 1px solid #d9d9d9; border-radius: 8px; font-size: 16px; }
+.btn-primary { width: 100%; padding: 13px; background: #6b73ff; color: white;
+               border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+               margin-bottom: 16px; font-size: 15px; }
 .divider { display: flex; align-items: center; color: #999; font-size: 12px; margin: 16px 0; }
 .divider::before, .divider::after { content: ""; flex: 1; border-bottom: 1px solid #e0e0e0; }
 .divider span { padding: 0 10px; }
-.btn-google { width: 100%; padding: 10px; background: white; color: #333;
+.btn-google { width: 100%; padding: 11px; background: white; color: #333;
               border: 1px solid #d9d9d9; border-radius: 8px; cursor: pointer;
               display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
 .footer-link { text-align: center; margin-top: 20px; font-size: 13px; color: #666; }
 .footer-link a { color: #6b73ff; text-decoration: none; font-weight: 600; }
 .msg { color: #e74c3c; font-size: 13px; text-align: center; margin-bottom: 12px; }
+@media (max-width: 480px) {
+    .card { padding: 28px 22px; border-radius: 12px; }
+}
 </style>
 """
 
@@ -127,7 +134,7 @@ def login():
         if row and row[0] and check_password_hash(row[0], password):
             return redirigir_tras_login(usuario)
         error = "Usuario o contraseña incorrectos"
-    return render_template_string(LOGIN_STYLE + """
+    return render_template_string(BASE_HEAD + """
         <div class="card">
             <h2>Inicia sesión en tu cuenta</h2>
             {% if error %}<p class="msg">{{ error }}</p>{% endif %}
@@ -161,7 +168,7 @@ def registro():
         except sqlite3.IntegrityError:
             error = "Ese usuario ya existe"
             conn.close()
-    return render_template_string(LOGIN_STYLE + """
+    return render_template_string(BASE_HEAD + """
         <div class="card">
             <h2>Crear cuenta</h2>
             {% if error %}<p class="msg">{{ error }}</p>{% endif %}
