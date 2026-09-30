@@ -1,13 +1,15 @@
 import os
-import sqlite3
+from datetime import datetime
 from flask import Flask, request, redirect, render_template_string, session, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 from authlib.integrations.flask_client import OAuth
+from database import fb_get, fb_set, sanitizar
 from inicio.inicio import inicio_bp
 from perfil.escoge import escoge_bp
 from perfil.tecnico import tecnico_bp
 from perfil.usuario import usuario_bp
 from perfil.calificar import calificar_bp
+from perfil.solicitudes import solicitudes_bp
 
 app = Flask(__name__)
 app.secret_key = "tu_clave_secreta_super_segura"
@@ -17,44 +19,7 @@ app.register_blueprint(escoge_bp)
 app.register_blueprint(tecnico_bp)
 app.register_blueprint(usuario_bp)
 app.register_blueprint(calificar_bp)
-
-# Si existe la variable DB_PATH (volumen persistente en Railway), la usa.
-# Si no, usa un archivo local (para pruebas en tu laptop).
-DB = os.environ.get("DB_PATH", "usuarios.db")
-
-def init_db():
-    conn = sqlite3.connect(DB)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario TEXT UNIQUE NOT NULL,
-            password TEXT,
-            email TEXT,
-            metodo TEXT DEFAULT 'local',
-            rol TEXT,
-            oficio TEXT,
-            telefono TEXT,
-            precio_desde REAL,
-            descripcion TEXT,
-            latitud REAL,
-            longitud REAL,
-            fecha_registro TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS calificaciones (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tecnico TEXT NOT NULL,
-            autor TEXT NOT NULL,
-            estrellas INTEGER NOT NULL,
-            comentario TEXT,
-            fecha TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
+app.register_blueprint(solicitudes_bp)
 
 oauth = OAuth(app)
 google = oauth.register(
@@ -93,9 +58,7 @@ input { width: 100%; padding: 12px; margin-bottom: 16px;
 .footer-link { text-align: center; margin-top: 20px; font-size: 13px; color: #666; }
 .footer-link a { color: #6b73ff; text-decoration: none; font-weight: 600; }
 .msg { color: #e74c3c; font-size: 13px; text-align: center; margin-bottom: 12px; }
-@media (max-width: 480px) {
-    .card { padding: 28px 22px; border-radius: 12px; }
-}
+@media (max-width: 480px) { .card { padding: 28px 22px; border-radius: 12px; } }
 </style>
 """
 
@@ -113,13 +76,13 @@ GOOGLE_BTN = """
 """
 
 def redirigir_tras_login(usuario):
-    conn = sqlite3.connect(DB)
-    row = conn.execute("SELECT rol FROM usuarios WHERE usuario = ?", (usuario,)).fetchone()
-    conn.close()
+    clave = sanitizar(usuario)
+    datos = fb_get(f"usuarios/{clave}") or {}
     session["usuario"] = usuario
-    if row and row[0]:
-        session["rol"] = row[0]
-        return redirect(url_for("tecnico.panel" if row[0] == "tecnico" else "usuario.panel"))
+    rol = datos.get("rol")
+    if rol:
+        session["rol"] = rol
+        return redirect(url_for("tecnico.panel" if rol == "tecnico" else "usuario.panel"))
     return redirect(url_for("escoge.escoge"))
 
 @app.route("/login", methods=["GET", "POST"])
@@ -128,10 +91,9 @@ def login():
     if request.method == "POST":
         usuario = request.form["usuario"]
         password = request.form["password"]
-        conn = sqlite3.connect(DB)
-        row = conn.execute("SELECT password FROM usuarios WHERE usuario = ?", (usuario,)).fetchone()
-        conn.close()
-        if row and row[0] and check_password_hash(row[0], password):
+        clave = sanitizar(usuario)
+        datos = fb_get(f"usuarios/{clave}")
+        if datos and datos.get("password") and check_password_hash(datos["password"], password):
             return redirigir_tras_login(usuario)
         error = "Usuario o contraseña incorrectos"
     return render_template_string(BASE_HEAD + """
@@ -156,18 +118,17 @@ def registro():
     if request.method == "POST":
         usuario = request.form["usuario"]
         password = request.form["password"]
-        conn = sqlite3.connect(DB)
-        try:
-            conn.execute(
-                "INSERT INTO usuarios (usuario, password, metodo) VALUES (?, ?, 'local')",
-                (usuario, generate_password_hash(password))
-            )
-            conn.commit()
-            conn.close()
-            return redirect(url_for("login"))
-        except sqlite3.IntegrityError:
+        clave = sanitizar(usuario)
+        if fb_get(f"usuarios/{clave}"):
             error = "Ese usuario ya existe"
-            conn.close()
+        else:
+            fb_set(f"usuarios/{clave}", {
+                "usuario": usuario,
+                "password": generate_password_hash(password),
+                "metodo": "local",
+                "fecha_registro": datetime.utcnow().isoformat()
+            })
+            return redirect(url_for("login"))
     return render_template_string(BASE_HEAD + """
         <div class="card">
             <h2>Crear cuenta</h2>
@@ -195,17 +156,13 @@ def authorized():
     user_info = token.get("userinfo")
     email = user_info["email"]
     nombre = user_info.get("name", email)
-
-    conn = sqlite3.connect(DB)
-    row = conn.execute("SELECT usuario FROM usuarios WHERE email = ?", (email,)).fetchone()
-    if not row:
-        conn.execute(
-            "INSERT INTO usuarios (usuario, email, metodo) VALUES (?, ?, 'google')",
-            (nombre, email)
-        )
-        conn.commit()
-    conn.close()
-
+    clave = sanitizar(nombre)
+    datos = fb_get(f"usuarios/{clave}")
+    if not datos:
+        fb_set(f"usuarios/{clave}", {
+            "usuario": nombre, "email": email, "metodo": "google",
+            "fecha_registro": datetime.utcnow().isoformat()
+        })
     return redirigir_tras_login(nombre)
 
 @app.route("/logout")

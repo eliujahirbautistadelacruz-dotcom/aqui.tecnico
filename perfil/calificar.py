@@ -1,9 +1,8 @@
-import sqlite3
-import os
+from datetime import datetime
 from flask import Blueprint, session, redirect, url_for, render_template_string, request
+from database import fb_push
 
 calificar_bp = Blueprint("calificar", __name__)
-DB = os.environ.get("DB_PATH", "usuarios.db")
 
 ESTILO = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,8 +21,7 @@ body {
 .estrellas { display: flex; gap: 6px; font-size: 34px; margin-bottom: 18px; justify-content: center; }
 .estrellas label { cursor: pointer; color: #ddd; }
 .estrellas input { display: none; }
-.estrellas input:checked ~ label,
-.estrellas label:hover, .estrellas label:hover ~ label { color: #f5a623; }
+.estrellas input:checked ~ label, .estrellas label:hover, .estrellas label:hover ~ label { color: #f5a623; }
 textarea { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #d9d9d9;
            font-size: 15px; font-family: inherit; margin-bottom: 16px; }
 button { width: 100%; padding: 13px; background: #6b73ff; color: white; border: none;
@@ -37,19 +35,15 @@ button { width: 100%; padding: 13px; background: #6b73ff; color: white; border: 
 def calificar(tecnico):
     if "usuario" not in session:
         return redirect(url_for("login"))
-
     if request.method == "POST":
-        estrellas = int(request.form["estrellas"])
-        comentario = request.form.get("comentario", "")
-        conn = sqlite3.connect(DB)
-        conn.execute(
-            "INSERT INTO calificaciones (tecnico, autor, estrellas, comentario) VALUES (?, ?, ?, ?)",
-            (tecnico, session["usuario"], estrellas, comentario)
-        )
-        conn.commit()
-        conn.close()
+        fb_push("calificaciones", {
+            "tecnico": tecnico,
+            "autor": session["usuario"],
+            "estrellas": int(request.form["estrellas"]),
+            "comentario": request.form.get("comentario", ""),
+            "fecha": datetime.utcnow().isoformat()
+        })
         return redirect(url_for("usuario.panel"))
-
     return render_template_string(ESTILO + """
         <div class="card">
             <h2>Calificar a {{ tecnico }}</h2>
